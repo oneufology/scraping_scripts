@@ -1,23 +1,38 @@
 import json
+import pathlib
 import scrapy
 from scrapy.crawler import CrawlerProcess
 
 
-class TestSpider(scrapy.Spider):
-    name = "test"
-    base_url = "https://www.xxxxxxxx.it"
-    start_urls = ['https://www.xxxxxxxx.it/categorie']
-    api_doctor_url = "https://www.xxxxxxxx.it/api/v3/doctors/%s"
-    ONLINE_CONSULT = 'consulenza online'
-    headers = {
-        'authorization': 'Bearer NzdjNDA5ZGU5ZmZhNDA3M2IwMmNiYzdhZjdlOTgzNjMzZjNjYmRhMGQxZGNlNjlmMWRhNDlhZjQwNjRkNjg5ZA'
-    }
+NAME = 'turkey'
+TOKEN = 'Bearer ZTJmMzYwMDE3YjJkYjk3NDMzZGZjZjhjMzM0MjE3MjIzMGMwYjVmOGQzZmM2NmI2YjExMjlhZjA0N2YzZGU5YQ'
+_dir = pathlib.Path().absolute()
+
+
+class TurkeyPhysiciansSpider(scrapy.Spider):
+    def __init__(self, name, token):
+        self.name = name
+        self.headers = {"authorization": token}
+
+    # name = "turkey"
+    base_url = "https://www.xxxxxx.com%s"
+    start_urls = ['https://www.xxxxxx.com/uzmanlik-alanlari']
+    category_keyword = "ayrintili"
+    api_doctor_url = base_url % "/api/v3/doctors/%s"
+    ONLINE_CONSULT = "online"
+    # headers = {
+    #     "authorization":
+    # }
 
     def parse(self, response):
-        categories = response.xpath("//a[contains(@href, 'categorie/')]")
+        categories = response.xpath(f"//a[contains(@href, '{self.category_keyword}/')]")
         yield from response.follow_all(categories, callback=self.parse_category)
 
     def parse_category(self, response):
+        cityes = response.css("ul.list-unstyled li.col-sm-6 a")
+        yield from response.follow_all(cityes, callback=self.parse_city)
+
+    def parse_city(self, response):
         doctor_items = response.xpath("//div[@id='search-content']/div/ul/li/div[@class='factors']/following-sibling::div[@class='panel panel-default']")
         for item in doctor_items:
             _id = item.css("::attr(data-result-id)").get()
@@ -26,7 +41,7 @@ class TestSpider(scrapy.Spider):
 
         next_page = response.css("li.next a::attr(href)").get()
         if next_page:
-            yield scrapy.Request(next_page, callback=self.parse_category)
+            yield scrapy.Request(next_page, callback=self.parse_city)
 
     def parse_doctor(self, response):
         data = json.loads(response.text)
@@ -39,10 +54,11 @@ class TestSpider(scrapy.Spider):
             'emails': [],
             'specialties': [],
             'externalId': [],
-            '_id': data.get('id'),
+            'id': data.get('id'),
+            'url': data.get('url'),
         }
         doctor['titles'] = doctor['titles'].strip('. ') if doctor['titles'] else ''
-        url = self.api_doctor_url % doctor['_id'] + '/specializations'
+        url = self.api_doctor_url % doctor['id'] + '/specializations'
         yield scrapy.Request(
             url,
             headers=self.headers,
@@ -57,7 +73,7 @@ class TestSpider(scrapy.Spider):
             spec = item.get('name')
             if spec:
                 doctor['specialties'].append(spec.capitalize())
-        url = self.api_doctor_url % doctor['_id'] + '/addresses'
+        url = self.api_doctor_url % doctor['id'] + '/addresses'
         yield scrapy.Request(
             url,
             headers=self.headers,
@@ -81,11 +97,14 @@ class TestSpider(scrapy.Spider):
                         'affiliation': affiliation,
                         'geo': geo
                      })
-        del doctor['_id']
         yield doctor
 
 
 if __name__ == '__main__':
-    process = CrawlerProcess()
-    process.crawl(TestSpider)
+    process = CrawlerProcess({
+        'FEED_FORMAT': 'jsonlines',
+        'FEED_URI': f'{_dir}/{NAME}.jsonlines',
+    })
+    process.crawl(TurkeyPhysiciansSpider, NAME, TOKEN)
     process.start()
+    
