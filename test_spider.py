@@ -14,15 +14,11 @@ class TurkeyPhysiciansSpider(scrapy.Spider):
         self.name = name
         self.headers = {"authorization": token}
 
-    # name = "turkey"
     base_url = "https://www.xxxxxx.com%s"
     start_urls = ['https://www.xxxxxx.com/uzmanlik-alanlari']
     category_keyword = "ayrintili"
     api_doctor_url = base_url % "/api/v3/doctors/%s"
     ONLINE_CONSULT = "online"
-    # headers = {
-    #     "authorization":
-    # }
 
     def parse(self, response):
         categories = response.xpath(f"//a[contains(@href, '{self.category_keyword}/')]")
